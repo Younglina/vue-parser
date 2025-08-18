@@ -1,0 +1,100 @@
+{
+  "name": "vue-dependency-parser-mcp",
+  "displayName": "Vue依赖解析器",
+  "description": "基于MCP的Vue文件依赖关系解析服务器，支持Vue2到Vue3迁移",
+  "version": "1.0.0",
+  "author": "Vue Dependency Parser",
+  "homepage": "https://github.com/Younglina/vue-parser#readme",
+  "keywords": ["mcp", "vue", "dependency", "parser", "migration", "vue3", "typescript"],
+  "categories": ["development", "vue", "migration"],
+  "capabilities": {
+    "tools": [
+      {
+        "name": "parse_vue_dependencies",
+        "description": "解析单个Vue文件的直接依赖",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Vue文件路径"
+            },
+            "aliasConfig": {
+              "type": "object",
+              "description": "路径别名配置",
+              "properties": {
+                "@": {
+                  "type": "string",
+                  "description": "@别名路径"
+                }
+              }
+            },
+            "baseDir": {
+              "type": "string",
+              "description": "项目根目录"
+            }
+          },
+          "required": ["filePath"]
+        }
+      },
+      {
+        "name": "analyze_dependency_tree",
+        "description": "递归分析Vue文件的完整依赖树",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Vue文件路径"
+            },
+            "maxDepth": {
+              "type": "number",
+              "description": "最大递归深度",
+              "default": 10
+            },
+            "aliasConfig": {
+              "type": "object",
+              "description": "路径别名配置"
+            }
+          },
+          "required": ["filePath"]
+        }
+      },
+      {
+        "name": "copy_vue_dependencies",
+        "description": "复制Vue文件及其所有依赖到指定目录",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "源Vue文件路径"
+            },
+            "targetDir": {
+              "type": "string",
+              "description": "目标目录"
+            },
+            "includeNodeModules": {
+              "type": "boolean",
+              "description": "是否包含node_modules依赖",
+              "default": false
+            }
+          },
+          "required": ["filePath", "targetDir"]
+        }
+      }
+    ]
+  },
+  "runtime": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["index.js"],
+    "env": {
+      "NODE_ENV": "production"
+    }
+  },
+  "installation": {
+    "type": "npm",
+    "package": "vue-dependency-parser-mcp"
+  }
+}

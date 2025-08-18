@@ -1,21 +1,26 @@
 {
   "name": "vue-dependency-parser-mcp",
   "version": "1.0.0",
-  "description": "MCP服务器，用于解析Vue文件的依赖关系",
+  "description": "Vue文件依赖关系解析服务器",
   "main": "index.js",
   "type": "module",
+  "bin": {
+    "vue-dependency-parser-mcp": "./index.js"
+  },
   "scripts": {
     "start": "node index.js",
-    "test": "node test/test-runner.js"
+    "dev": "node --inspect index.js",
+    "test": "node test.js"
   },
   "keywords": [
     "mcp",
     "vue",
     "dependency",
     "parser",
-    "trae",
-    "ai",
-    "migration"
+    "migration",
+    "vue3",
+    "typescript",
+    "lobehub"
   ],
   "author": "Vue Dependency Parser",
   "license": "MIT",
@@ -28,8 +33,20 @@
   },
   "homepage": "https://github.com/your-username/vue-dependency-parser-mcp#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.3",
+    "@modelcontextprotocol/sdk": "^0.5.0",
     "@vue/compiler-sfc": "^3.5.18",
-    "awesome-qr": "^2.1.5-rc.0"
-  }
+    "fs-extra": "^11.2.0",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "lobe-config.json"
+  ]
 }
