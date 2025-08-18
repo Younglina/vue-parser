@@ -1,0 +1,35 @@
+{
+  "name": "vue-dependency-parser-mcp",
+  "version": "1.0.0",
+  "description": "MCP服务器，用于解析Vue文件的依赖关系",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test/test-runner.js"
+  },
+  "keywords": [
+    "mcp",
+    "vue",
+    "dependency",
+    "parser",
+    "trae",
+    "ai",
+    "migration"
+  ],
+  "author": "Vue Dependency Parser",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/vue-dependency-parser-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/vue-dependency-parser-mcp/issues"
+  },
+  "homepage": "https://github.com/your-username/vue-dependency-parser-mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.3",
+    "@vue/compiler-sfc": "^3.5.18",
+    "awesome-qr": "^2.1.5-rc.0"
+  }
+}

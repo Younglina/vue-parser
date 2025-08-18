@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vue-dependency-parser": {
+      "command": "node",
+      "args": ["e:/myrepo/mcp/index.js"],
+      "env": {
+        "ALIASES": "{\"@\":\"src\",\"~\":\"src\",\"components\":\"src/components\"}"
+      }
+    }
+  }
+}
