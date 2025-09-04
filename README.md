@@ -206,58 +206,51 @@ async buildDependencyTree(filePath, aliasConfig, baseDir, visited, circularDeps,
 
 ## 🚀 使用方式
 
-### 1. 启动服务器
+### 1. 配置MCP
+```javascript
+{
+  "mcpServers": {
+    "vue-dependency-parser": {
+      "command": "npx",
+      "args": [
+        "vue-dependency-parser-mcp"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+如果出现报错，清除一下npm和npx的缓存
 ```bash
-node index.js
+npm cache clean --force
+npx clear-npx-cache --force
 ```
+### 2. 调用MCP服务
+在对应的开发工具中引用MCP即可。
 
-### 2. 通过MCP客户端调用
+### 3. 使用案例
+以A分支需要迁移代码到B分支为例
 
-**解析单个文件依赖**：
-```json
-{
-  "method": "tools/call",
-  "params": {
-    "name": "parse_vue_dependencies",
-    "arguments": {
-      "filePath": "./src/components/Header.vue",
-      "aliasConfig": { "@": "./src" },
-      "baseDir": "/project/root"
-    }
-  }
+- 找到A分支需要迁移功能的入口文件，比如`\src\views\assets\unitManagement\index.vue`
+- 把它拖入对话框中，并输入提示语句：分析并复制到output目录
+- 复制出来的文件就是对应的src目录下的文件，文件目录层级和原文件是一致的
+- 最后可以直接复制output内的所有文件到B分支src目录下
+
+### 本地测试
+- clone项目后，先在项目根目录下执行`npm install`安装依赖
+- 创建`testConfig.js`文件，配置测试参数
+```javascript
+export const config = {
+    testFile: 入口文件路径,如：'/src/views/home.vue',
+    baseDir: 项目根目录,如：'e:/myrepo/项目名称',
+    aliasConfig: {
+        '@': './src',
+        '~': './src'
+    },
+    targetDir: 'e:/myrepo/项目名称/output'
 }
 ```
-
-**分析完整依赖树**：
-```json
-{
-  "method": "tools/call",
-  "params": {
-    "name": "analyze_dependency_tree",
-    "arguments": {
-      "filePath": "./src/views/HomePage.vue",
-      "maxDepth": 5
-    }
-  }
-}
-```
-
-**复制文件和依赖**：
-```json
-{
-  "method": "tools/call",
-  "params": {
-    "name": "copy_vue_dependencies",
-    "arguments": {
-      "filePath": "./src/components/UserProfile.vue",
-      "targetDir": "./backup",
-      "includeNodeModules": false
-    }
-  }
-}
-```
-
-## 🔍 技术特点
+- 执行`node testMcp.js`进行测试
 
 ### 优势
 
@@ -273,23 +266,6 @@ node index.js
 2. **条件导入** - 不处理基于条件的模块加载
 3. **外部依赖** - 默认不处理node_modules中的第三方包
 4. **复杂语法** - 对于非标准的import语法可能遗漏
-
-## 📚 扩展建议
-
-### 可能的改进方向
-
-1. **支持更多文件类型** - 添加对TypeScript、JSX等的支持
-2. **可视化界面** - 开发Web界面展示依赖关系图
-3. **性能优化** - 添加文件变更监听和增量分析
-4. **配置文件支持** - 支持从webpack.config.js等读取别名配置
-5. **插件系统** - 允许用户自定义依赖提取规则
-
-### 集成建议
-
-1. **IDE插件** - 集成到VSCode等编辑器中
-2. **构建工具** - 与webpack、vite等构建工具结合
-3. **CI/CD** - 在持续集成中进行依赖分析
-4. **文档生成** - 自动生成项目依赖文档
 
 ## 🎉 总结
 

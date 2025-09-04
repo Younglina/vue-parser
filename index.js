@@ -8,6 +8,14 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+/**
+ * 优势：
+ *  - ✅ 语法验证 ：能检测Vue文件语法错误
+ *  - ✅ 准确分离 ：正确处理 <template> 、 <script> 、 <style> 边界
+ *  - ✅ 处理复杂情况 ：支持多个 <style> 块、 <script setup> 等
+ *  - ✅ Vue特性支持 ：处理Vue指令、插值表达式等
+ *  - ✅ 错误处理 ：提供详细的解析错误信息
+ */
 import { parse } from '@vue/compiler-sfc';
 import fs from 'fs';
 import path from 'path';
@@ -21,7 +29,7 @@ class VueParserServer {
     this.server = new Server(
       {
         name: 'vue-parser-server',
-        version: '1.0.0',
+        version: '1.1.0',
       },
       {
         capabilities: {
@@ -150,6 +158,196 @@ class VueParserServer {
   }
 
   /**
+   * 检测Vue文件中是否使用了vuex
+   */
+  detectVuexUsage(content) {
+    const vuexPatterns = [
+      // import { mapState, mapActions, mapMutations, mapGetters } from 'vuex'
+      /import\s+{[^}]*}\s+from\s+["']vuex["']/g,
+      // import Vuex from 'vuex'
+      /import\s+Vuex\s+from\s+["']vuex["']/g,
+      // this.$store
+      /this\.\$store/g,
+      // mapState, mapActions, etc usage
+      /\.\.\.mapState\(/g,
+      /\.\.\.mapActions\(/g,
+      /\.\.\.mapMutations\(/g,
+      /\.\.\.mapGetters\(/g
+    ];
+    
+    let hasVuex = false;
+    for (const pattern of vuexPatterns) {
+      if (pattern.test(content)) {
+        hasVuex = true;
+        break;
+      }
+    }
+
+    // 如果检测到Vuex使用，直接提取使用的store模块
+    const usedModules = new Set();
+    if (hasVuex) {
+      // 匹配mapState, mapActions, mapMutations, mapGetters的使用
+      const mapPatterns = [
+        /\.\.\.mapState\(\s*["']([^"']+)["']/g,
+        /\.\.\.mapActions\(\s*["']([^"']+)["']/g,
+        /\.\.\.mapMutations\(\s*["']([^"']+)["']/g,
+        /\.\.\.mapGetters\(\s*["']([^"']+)["']/g
+      ];
+      
+      for (const pattern of mapPatterns) {
+        let match;
+        while ((match = pattern.exec(content)) !== null) {
+          usedModules.add(match[1]);
+        }
+      }
+      
+      // 匹配this.$store.state.moduleName的使用
+      const storeStatePattern = /this\.\$store\.state\.([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
+      let storeMatch;
+      while ((storeMatch = storeStatePattern.exec(content)) !== null) {
+        usedModules.add(storeMatch[1]);
+      }
+      
+      // 匹配this.$store.dispatch('moduleName/action')的使用
+      const dispatchPattern = /this\.\$store\.dispatch\(\s*["']([^"'/]+)/g;
+      let dispatchMatch;
+      while ((dispatchMatch = dispatchPattern.exec(content)) !== null) {
+        usedModules.add(dispatchMatch[1]);
+      }
+      
+      // 匹配this.$store.commit('moduleName/mutation')的使用
+      const commitPattern = /this\.\$store\.commit\(\s*["']([^"'/]+)/g;
+      let commitMatch;
+      while ((commitMatch = commitPattern.exec(content)) !== null) {
+        usedModules.add(commitMatch[1]);
+      }
+    }
+
+    return {
+      hasVuex,
+      usedModules: Array.from(usedModules)
+    };
+  }
+
+  /**
+   * 查找store入口文件
+   */
+  findStoreEntry(baseDir) {
+    const possiblePaths = [
+      path.join(baseDir, 'src', 'store.js'),
+      path.join(baseDir, 'src', 'store', 'index.js'),
+      path.join(baseDir, 'src', 'stores', 'index.js'),
+      path.join(baseDir, 'store.js'),
+      path.join(baseDir, 'store', 'index.js')
+    ];
+
+    for (const filePath of possiblePaths) {
+      if (fs.existsSync(filePath)) {
+        return filePath;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 解析store入口文件，提取模块信息
+   */
+  parseStoreEntry(storeFilePath) {
+    const content = fs.readFileSync(storeFilePath, 'utf-8');
+    
+    // 匹配import语句
+    const importRegex = /import\s+([^\s]+)\s+from\s+["']([^"']+)["']/g;
+    const imports = [];
+    let match;
+    
+    while ((match = importRegex.exec(content)) !== null) {
+      imports.push({
+        variable: match[1],
+        path: match[2]
+      });
+    }
+
+    // 匹配modules配置
+    const modulesRegex = /modules:\s*{([^}]+)}/s;
+    const modulesMatch = content.match(modulesRegex);
+    const modules = {};
+
+    if (modulesMatch) {
+      const modulesContent = modulesMatch[1];
+      
+      // 先处理完整的 key: value 格式
+      const moduleRegex = /(\w+):\s*(\w+)/g;
+      let moduleMatch;
+      
+      while ((moduleMatch = moduleRegex.exec(modulesContent)) !== null) {
+        modules[moduleMatch[1]] = moduleMatch[2];
+      }
+      
+      // 处理ES6简写语法（如 currentUser, 相当于 currentUser: currentUser）
+      // 移除已匹配的 key: value 部分，然后查找剩余的简写模块
+      let remainingContent = modulesContent;
+      remainingContent = remainingContent.replace(/(\w+):\s*(\w+)/g, '');
+      
+      // 匹配简写的模块名（单独的标识符，后面跟逗号或空白）
+      const shorthandRegex = /\b(\w+)(?=\s*[,}])/g;
+      let shorthandMatch;
+      
+      while ((shorthandMatch = shorthandRegex.exec(remainingContent)) !== null) {
+        const moduleName = shorthandMatch[1];
+        // 排除已经处理过的模块和JavaScript关键字
+        if (!modules[moduleName] && !['modules', 'export', 'default', 'const', 'let', 'var'].includes(moduleName)) {
+          modules[moduleName] = moduleName; // 简写语法中，key和value相同
+        }
+      }
+    }
+
+    return { imports, modules };
+  }
+
+  /**
+   * 查找模块对应的store文件
+   */
+  findModuleStoreFile(moduleName, storeInfo, baseDir, aliasConfig = {}) {
+    const { imports, modules } = storeInfo;
+    
+    // 找到模块对应的变量名
+    const moduleVariable = modules[moduleName];
+    if (!moduleVariable) {
+      return null;
+    }
+
+    // 找到变量对应的import路径
+    const importInfo = imports.find(imp => {
+      return imp.variable === moduleVariable
+    });
+    if (!importInfo) {
+      return null;
+    }
+
+    // 解析路径
+    let importPath = importInfo.path;
+    
+    // 处理别名路径
+    importPath = this.resolveAlias(importPath, aliasConfig, baseDir);
+    
+    // 尝试不同的文件扩展名
+    const possibleExtensions = ['.js', '.ts', '/index.js', '/index.ts'];
+    for (const ext of possibleExtensions) {
+      const fullPath = importPath + ext;
+      if (fs.existsSync(fullPath)) {
+        return fullPath;
+      }
+    }
+
+    // 尝试直接路径
+    if (fs.existsSync(importPath)) {
+      return importPath;
+    }
+
+    return null;
+  }
+
+  /**
    * 解析Vue文件依赖
    */
   async parseVueDependencies(args) {
@@ -195,9 +393,49 @@ class VueParserServer {
         template: [],
         script: [],
         style: [],
+        store: [],
       };
-      console.log(dependencies)
 
+      // 检测vuex使用
+      const scriptContents = [];
+      if (descriptor.script) {
+        scriptContents.push(descriptor.script.content);
+      }
+      if (descriptor.scriptSetup) {
+        scriptContents.push(descriptor.scriptSetup.content);
+      }
+
+      let hasVuex = false;
+      const allUsedModules = new Set();
+      for (const content of scriptContents) {
+        const vuexInfo = this.detectVuexUsage(content);
+        if (vuexInfo.hasVuex) {
+          hasVuex = true;
+          vuexInfo.usedModules.forEach(module => allUsedModules.add(module));
+        }
+      }
+      // 如果检测到vuex使用，分析store模块
+      if (hasVuex) {
+        const storeEntry = this.findStoreEntry(baseDir);
+        if (storeEntry) {
+          const storeInfo = this.parseStoreEntry(storeEntry);
+          
+          // 只查找被使用的模块的store文件
+          for (const moduleName of allUsedModules) {
+            if (storeInfo.modules[moduleName]) {
+              const moduleStoreFile = this.findModuleStoreFile(
+                moduleName, 
+                storeInfo, 
+                baseDir,
+                aliasConfig
+              );
+              if (moduleStoreFile && fs.existsSync(moduleStoreFile)) {
+                dependencies.store.push(moduleStoreFile);
+              }
+            }
+          }
+        }
+      }
       // 解析template部分的依赖
       if (descriptor.template) {
         dependencies.template = this.extractTemplateDependencies(
@@ -251,11 +489,14 @@ class VueParserServer {
               success: true,
               filePath: resolvedPath,
               dependencies,
+              hasVuex,
+              usedStoreModules: Array.from(allUsedModules),
               summary: {
                 totalFiles: dependencies.template.length + dependencies.script.length + dependencies.style.length,
                 templateFiles: dependencies.template.length,
                 scriptFiles: dependencies.script.length,
                 styleFiles: dependencies.style.length,
+                storeFiles: dependencies.store.length,
               },
             }, null, 2),
           },
@@ -393,6 +634,11 @@ class VueParserServer {
 
     return dependencies;
   }
+
+  /**
+   * 提取Vue文件中使用的store模块
+   */
+
 
   /**
    * 提取script部分的依赖
@@ -559,6 +805,13 @@ class VueParserServer {
         fs.mkdirSync(resolvedTargetDir, { recursive: true });
       }
 
+      // 首先解析Vue文件依赖，获取store文件列表
+      const parseResult = await this.parseVueDependencies({
+        filePath, aliasConfig, baseDir
+      });
+      const parseData = JSON.parse(parseResult.content[0].text);
+      const storeFiles = parseData.dependencies.store || [];
+
       // 分析依赖树
       const visited = new Set();
       const circularDeps = new Set();
@@ -566,8 +819,9 @@ class VueParserServer {
         filePath, aliasConfig, baseDir, visited, circularDeps, 0, 10
       );
 
-      // 收集所有需要复制的文件
-      const allFiles = this.flattenDependencyTree(dependencyTree);
+      // 收集所有需要复制的文件（包括依赖树文件和store文件）
+      const dependencyFiles = this.flattenDependencyTree(dependencyTree);
+      const allFiles = [...new Set([...dependencyFiles, ...storeFiles])];
       const copiedFiles = [];
       const errors = [];
 
@@ -680,7 +934,8 @@ class VueParserServer {
       const allFileDeps = [
         ...parsedDeps.dependencies.template,
         ...parsedDeps.dependencies.script,
-        ...parsedDeps.dependencies.style
+        ...parsedDeps.dependencies.style,
+        ...parsedDeps.dependencies.store
       ];
 
       const dependencies = [];
@@ -787,7 +1042,13 @@ class VueParserServer {
     }
     
     // 复制文件
-    fs.copyFileSync(sourcePath, targetPath);
+    try {
+      fs.copyFileSync(sourcePath, targetPath);
+    } catch (error) {
+      console.error(`❌ 复制失败: ${sourcePath} -> ${targetPath}`);
+      console.error(`错误: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -818,10 +1079,13 @@ class VueParserServer {
   async start() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Vue Parser MCP Server started');
+    console.log('Vue Parser MCP Server started');
   }
 }
 
 // 启动服务器
 const server = new VueParserServer();
-server.start().catch(console.error);
+
+// 导出类和实例，方便测试使用
+export { VueParserServer };
+export default server;

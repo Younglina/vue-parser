@@ -2,7 +2,7 @@
   "name": "vue-dependency-parser-mcp",
   "displayName": "Vue依赖解析器",
   "description": "基于MCP的Vue文件依赖关系解析服务器，支持Vue2到Vue3迁移",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Vue Dependency Parser",
   "homepage": "https://github.com/Younglina/vue-parser#readme",
   "keywords": ["mcp", "vue", "dependency", "parser", "migration", "vue3", "typescript"],

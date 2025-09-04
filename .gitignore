@@ -1,3 +1,5 @@
 node_modules
 output
 src
+testConfig.js
+lobe-config.json
