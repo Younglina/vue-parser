@@ -29,7 +29,7 @@ class VueParserServer {
     this.server = new Server(
       {
         name: 'vue-parser-server',
-        version: '1.1.0',
+        version: '1.1.1',
       },
       {
         capabilities: {
