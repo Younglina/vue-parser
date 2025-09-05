@@ -384,7 +384,7 @@ class VueParserServer {
       if (errors.length > 0) {
         throw new McpError(
           ErrorCode.InternalError,
-          `Vue文件解析错误: ${errors.map(e => e.message).join(', ')}`
+          `Vue文件解析错误 (${resolvedPath}): ${errors.map(e => e.message).join(', ')}`
         );
       }
 
@@ -503,14 +503,26 @@ class VueParserServer {
         ],
       };
     } catch (error) {
-      if (error instanceof McpError) {
-        throw error;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              filePath: resolvedPath,
+              error: error.message || '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
       }
-
-      throw new McpError(
-        ErrorCode.InternalError,
-        `解析Vue文件时发生错误: ${error.message}`
-      );
+      // if (error instanceof McpError) {
+      //   throw error;
+      // }
+      // throw new McpError(
+      //   ErrorCode.InternalError,
+      //   `解析Vue文件时发生错误: ${error.message}`
+      // );
     }
   }
 
@@ -587,7 +599,7 @@ class VueParserServer {
   /**
    * 尝试解析文件路径（支持多种扩展名）
    */
-  resolveFileWithExtensions(filePath, extensions = ['.vue', '.js', '.ts', '.jsx', '.tsx']) {
+  resolveFileWithExtensions(filePath, extensions = ['.vue', '.js', '.ts', '.jsx', '.tsx', '.css', '.scss', '.sass', '.less']) {
     // 如果文件已有扩展名且存在，直接返回
     if (path.extname(filePath) && fs.existsSync(filePath)) {
       return filePath;
