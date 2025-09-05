@@ -130,80 +130,7 @@
 3. **Node.js内置模块**
    - `fs` - 文件系统操作
    - `path` - 路径处理和规范化
-
-### 关键算法实现
-
-#### 1. 路径解析算法
-
-```javascript
-// 支持相对路径、绝对路径、别名路径
-resolveAlias(importPath, aliasConfig, baseDir) {
-  // 按别名长度排序，确保最长匹配优先
-  const sortedAliases = Object.entries(aliasConfig)
-    .sort(([a], [b]) => b.length - a.length);
-  
-  // 精确匹配别名（避免部分匹配问题）
-  for (const [alias, realPath] of sortedAliases) {
-    if (normalizedImport.startsWith(alias)) {
-      const nextChar = normalizedImport[alias.length];
-      if (nextChar === undefined || nextChar === '/' || nextChar === '\\') {
-        // 替换别名为真实路径
-        return this.resolvePath(resolvedPath, baseDir);
-      }
-    }
-  }
-}
-```
-
-#### 2. 依赖提取算法
-
-**Script部分** - 支持多种import语法：
-```javascript
-const importPatterns = [
-  /import\s+["']([^"']+)["']/g,                    // import 'module'
-  /import\s+[^\s]+\s+from\s+["']([^"']+)["']/g,    // import something from 'module'
-  /import\s+\{[^}]*\}\s+from\s+["']([^"']+)["']/g, // import { something } from 'module'
-  /import\s+\*\s+as\s+[^\s]+\s+from\s+["']([^"']+)["']/g // import * as something from 'module'
-];
-```
-
-**Template部分** - 提取资源引用：
-```javascript
-const srcRegex = /src=["']([^"']+)["']/g; // <img src="...">
-```
-
-**Style部分** - CSS导入和资源：
-```javascript
-const importRegex = /@import\s+["']([^"']+)["']/g; // @import "..."
-const urlRegex = /url\(["']?([^"')]+)["']?\)/g;     // url(...)
-```
-
-#### 3. 循环依赖检测
-
-```javascript
-async buildDependencyTree(filePath, aliasConfig, baseDir, visited, circularDeps, depth, maxDepth) {
-  const resolvedPath = this.resolvePath(filePath, baseDir);
-  
-  // 检查是否已访问过（循环依赖）
-  if (visited.has(resolvedPath)) {
-    circularDeps.add(resolvedPath);
-    return { file: resolvedPath, dependencies: [], circular: true, depth };
-  }
-  
-  visited.add(resolvedPath);
-  // ... 递归处理依赖
-  visited.delete(resolvedPath); // 回溯时移除，允许其他路径访问
-}
-```
-
-### 错误处理机制
-
-1. **参数验证**：检查必需参数是否提供
-2. **文件存在性检查**：验证文件是否存在和可读
-3. **Vue文件解析错误**：处理语法错误和格式问题
-4. **路径解析错误**：处理无效路径和权限问题
-5. **统一错误格式**：使用MCP标准错误码和消息
-
+   
 ## 🚀 使用方式
 
 ### 1. 配置MCP
@@ -227,6 +154,7 @@ npx clear-npx-cache --force
 ```
 ### 2. 调用MCP服务
 在对应的开发工具中引用MCP即可。
+在Tare中，可以创建一个智能体，勾选对应的MCP，提示词可以使用`你的作用是根据用户提供的文件，调用给你的mcp工具分析文件并复制到output目录`
 
 ### 3. 使用案例
 以A分支需要迁移代码到B分支为例

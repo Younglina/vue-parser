@@ -143,7 +143,8 @@ class VueParserServer {
       const { name, arguments: args } = request.params;
 
       if (name === 'parse_vue_dependencies') {
-        return await this.parseVueDependencies(args);
+        // 直接调用parse_vue_dependencies工具时，默认查找路由信息
+        return await this.parseVueDependencies({ ...args, findRoutes: true });
       } else if (name === 'analyze_dependency_tree') {
         return await this.analyzeDependencyTree(args);
       } else if (name === 'copy_vue_dependencies') {
@@ -352,7 +353,7 @@ class VueParserServer {
    */
   async parseVueDependencies(args) {
     try {
-      const { filePath, aliasConfig = {}, baseDir = process.cwd() } = args;
+      const { filePath, aliasConfig = {}, baseDir = process.cwd(), outputDir = null, findRoutes = false } = args;
 
       // 验证输入参数
       if (!filePath) {
@@ -481,6 +482,16 @@ class VueParserServer {
         dependencies[key] = [...new Set(dependencies[key])];
       });
 
+      // 查找并保存路由信息到代办.md（仅当findRoutes为true时）
+      if (findRoutes) {
+        try {
+          const routeInfo = await this.findRouteInfo(resolvedPath, baseDir, aliasConfig);
+          await this.saveRouteInfoToTodo(routeInfo, resolvedPath, baseDir, outputDir);
+        } catch (error) {
+          console.error('处理路由信息时出错:', error.message);
+        }
+      }
+
       return {
         content: [
           {
@@ -523,6 +534,174 @@ class VueParserServer {
       //   ErrorCode.InternalError,
       //   `解析Vue文件时发生错误: ${error.message}`
       // );
+    }
+  }
+
+  /**
+   * 查找并解析路由信息
+   */
+  async findRouteInfo(filePath, baseDir, aliasConfig = {}) {
+    const routeInfo = {
+      imports: []
+    };
+
+    try {
+      // 查找src目录下的路由相关文件
+      const srcDir = path.join(baseDir, 'src');
+      if (!fs.existsSync(srcDir)) {
+        return routeInfo;
+      }
+
+      // 动态查找包含route或routes的文件
+      const findRouteFiles = (dir) => {
+        const files = [];
+        if (!fs.existsSync(dir)) return files;
+        
+        try {
+          const items = fs.readdirSync(dir);
+          for (const item of items) {
+            const fullPath = path.join(dir, item);
+            const stat = fs.statSync(fullPath);
+            
+            if (stat.isDirectory()) {
+              files.push(...findRouteFiles(fullPath));
+            } else if (stat.isFile()) {
+              const fileName = path.basename(item, path.extname(item));
+              if (fileName.toLowerCase().includes('route') || fileName.toLowerCase().includes('routes')) {
+                files.push(fullPath);
+              }
+            }
+          }
+        } catch (error) {
+          // 忽略无法访问的目录
+        }
+        return files;
+      };
+
+      const existingRoutePaths = findRouteFiles(srcDir);
+      // 获取目标文件的相对路径（用于匹配）
+      const targetFileRelative = path.relative(baseDir, filePath).replace(/\\/g, '/');
+      const targetFileName = path.basename(filePath, path.extname(filePath));
+      
+      // 计算相对于src/views的路径
+      const viewsDir = path.join(baseDir, 'src', 'views');
+      let targetFileRelativeToViews = '';
+      if (filePath.includes('src/views') || filePath.includes('src\\views')) {
+        targetFileRelativeToViews = path.relative(viewsDir, filePath).replace(/\\/g, '/');
+      }
+
+      // 解析每个路由文件
+      for (const routeFilePath of existingRoutePaths) {
+        const routeContent = fs.readFileSync(routeFilePath, 'utf-8');
+        
+        // 查找包含目标文件的路由配置
+        const foundRoutes = this.extractRouteInfoForFile(routeContent, targetFileRelative, targetFileName, routeFilePath);
+        if (foundRoutes.imports.length > 0) {
+          routeInfo.imports.push(...foundRoutes.imports);
+        }
+      }
+
+    } catch (error) {
+      console.error('查找路由信息时出错:', error.message);
+    }
+
+    return routeInfo;
+  }
+
+  /**
+   * 从路由文件中提取特定文件的路由信息
+   */
+  extractRouteInfoForFile(routeContent, targetFileRelative, targetFileName, routeFilePath) {
+    const result = {
+      imports: []
+    };
+
+    // 将文件路径转换为@/views格式
+    // 例如: src/views/assets/assetsManagement/index.vue -> @/views/assets/assetsManagement/index
+    let targetPath = '';
+    if (targetFileRelative.includes('src/views/') || targetFileRelative.includes('src\\views\\')) {
+      // 提取src/views/之后的部分
+      const viewsIndex = targetFileRelative.indexOf('src/views/') !== -1 ? 
+        targetFileRelative.indexOf('src/views/') + 'src/views/'.length :
+        targetFileRelative.indexOf('src\\views\\') + 'src\\views\\'.length;
+      
+      const pathAfterViews = targetFileRelative.substring(viewsIndex).replace(/\\/g, '/');
+      // 移除文件扩展名
+      targetPath = `@/views/${pathAfterViews.replace(/\.(vue|js|ts)$/, '')}`;
+    }
+    
+
+    
+    if (!targetPath) {
+        return result;
+    }
+    
+    // 查找组件导入定义（const ComponentName = () => import(...)形式）
+    // 支持多行格式，正确处理webpackChunkName注释
+    const componentImportRegex = /const\s+(\w+)\s*=\s*\(\)\s*=>\s*import\([\s\S]*?["']([^"']*@\/[^"']+)["'][\s\S]*?\)/g;
+    let componentMatch;
+    
+    while ((componentMatch = componentImportRegex.exec(routeContent)) !== null) {
+      const componentName = componentMatch[1];
+      const importPath = componentMatch[2];
+      
+      // 只匹配@/views开头的路径
+      if (!importPath.startsWith('@/views/')) {
+        continue;
+      }
+      
+      // 检查是否匹配目标路径
+      if (importPath === targetPath) {
+        result.imports.push({
+          statement: componentMatch[0],
+          name: componentName,
+          path: importPath,
+          routeFile: routeFilePath
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 保存路由信息到代办.md文件
+   */
+  async saveRouteInfoToTodo(routeInfo, filePath, baseDir, outputDir = null) {
+    // 严格检查：只有在真正找到相关路由信息时才保存
+    if (routeInfo.imports.length === 0) {
+      console.log(`未找到 ${path.basename(filePath)} 的相关路由信息，跳过保存`);
+      return;
+    }
+
+    // 确定代办.md文件的保存路径
+    const targetDir = outputDir || baseDir;
+    const todoFilePath = path.join(targetDir, '代办.md');
+    
+    // 确保输出目录存在
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const fileName = path.basename(filePath);
+    console.log(`找到 ${fileName} 的路由信息，保存到代办.md`);
+    let content = ''
+    
+    if (routeInfo.imports.length > 0) {
+      content += `## 路由信息\n\n`;
+      routeInfo.imports.forEach((imp, index) => {
+        content += `路由文件：${imp.routeFile}\n\n`;
+        content += `\`\`\`javascript\n${imp.statement}\n\`\`\`\n\n`;
+        content += `请根据对应信息复制对应的route数据\n\n`;
+      });
+    }
+    content += `---\n\n`;
+    
+    // 如果文件已存在，追加内容；否则创建新文件
+    if (fs.existsSync(todoFilePath)) {
+      const existingContent = fs.readFileSync(todoFilePath, 'utf-8');
+      fs.writeFileSync(todoFilePath, existingContent + content, 'utf-8');
+    } else {
+      fs.writeFileSync(todoFilePath, content, 'utf-8');
     }
   }
 
@@ -817,9 +996,9 @@ class VueParserServer {
         fs.mkdirSync(resolvedTargetDir, { recursive: true });
       }
 
-      // 首先解析Vue文件依赖，获取store文件列表
+      // 首先解析Vue文件依赖，获取store文件列表（只对主文件查找路由信息）
       const parseResult = await this.parseVueDependencies({
-        filePath, aliasConfig, baseDir
+        filePath, aliasConfig, baseDir, outputDir: resolvedTargetDir, findRoutes: true
       });
       const parseData = JSON.parse(parseResult.content[0].text);
       const storeFiles = parseData.dependencies.store || [];
@@ -935,11 +1114,12 @@ class VueParserServer {
     visited.add(resolvedPath);
 
     try {
-      // 解析当前文件的依赖
+      // 解析当前文件的依赖（不查找路由信息）
       const deps = await this.parseVueDependencies({
         filePath: resolvedPath,
         aliasConfig,
-        baseDir
+        baseDir,
+        findRoutes: false
       });
 
       const parsedDeps = JSON.parse(deps.content[0].text);
@@ -1097,6 +1277,9 @@ class VueParserServer {
 
 // 启动服务器
 const server = new VueParserServer();
+
+// 启动服务器
+server.start().catch(console.error);
 
 // 导出类和实例，方便测试使用
 export { VueParserServer };
