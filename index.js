@@ -585,7 +585,7 @@ class VueParserServer {
         return routeInfo;
       }
 
-      // 动态查找包含route或routes的文件
+      // 动态查找包含route或routes的文件和文件夹
       const findRouteFiles = (dir) => {
         const files = [];
         if (!fs.existsSync(dir)) return files;
@@ -597,7 +597,15 @@ class VueParserServer {
             const stat = fs.statSync(fullPath);
             
             if (stat.isDirectory()) {
-              files.push(...findRouteFiles(fullPath));
+              const dirName = path.basename(item);
+              // 如果是疑似route的文件夹，查找该文件夹下的所有文件
+              if (dirName.toLowerCase().includes('route') || dirName.toLowerCase().includes('routes')) {
+                const allFilesInRouteDir = this.getAllFilesInDirectory(fullPath);
+                files.push(...allFilesInRouteDir);
+              } else {
+                // 继续递归查找其他目录
+                files.push(...findRouteFiles(fullPath));
+              }
             } else if (stat.isFile()) {
               const fileName = path.basename(item, path.extname(item));
               if (fileName.toLowerCase().includes('route') || fileName.toLowerCase().includes('routes')) {
@@ -684,7 +692,7 @@ class VueParserServer {
       }
       
       // 检查是否匹配目标路径
-      if (importPath === targetPath) {
+      if (importPath.includes(targetPath)) {
         result.imports.push({
           statement: componentMatch[0],
           name: componentName,
@@ -1274,6 +1282,37 @@ class VueParserServer {
       console.error(`错误: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * 获取指定目录下的所有文件（递归）
+   */
+  getAllFilesInDirectory(dirPath) {
+    const files = [];
+    if (!fs.existsSync(dirPath)) return files;
+    
+    try {
+      const items = fs.readdirSync(dirPath);
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          // 递归获取子目录中的文件
+          files.push(...this.getAllFilesInDirectory(fullPath));
+        } else if (stat.isFile()) {
+          // 只添加支持的文件类型
+          const ext = path.extname(item).toLowerCase();
+          if (['.js', '.ts', '.vue', '.jsx', '.tsx'].includes(ext)) {
+            files.push(fullPath);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`无法读取目录 ${dirPath}:`, error.message);
+    }
+    
+    return files;
   }
 
   /**
