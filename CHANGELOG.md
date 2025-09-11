@@ -1,5 +1,29 @@
 # MCP Vue Parser 更新记录
 
+## [1.3.0] - 2025-09-05
+
+### ✨ Features
+
+#### 支持非Vue文件的依赖解析
+
+**新增功能：**
+- 扩展依赖解析能力，支持解析普通JavaScript/TypeScript文件中的require和import语句
+- 支持解析CSS/SCSS/SASS/LESS样式文件中的依赖
+- 移除文件类型限制，`isSupportedFile`方法现在支持所有文件类型
+- 改进`parseVueDependencies`方法，能够处理.js、.ts、.css等非Vue文件
+
+**技术实现：**
+- 修改`parseVueDependencies`方法，根据文件扩展名选择合适的解析策略
+- 对于JavaScript/TypeScript文件，直接使用`extractScriptDependencies`解析require和import语句
+- 对于样式文件，使用`extractStyleDependencies`解析@import等依赖
+- 保持向后兼容，Vue文件解析逻辑不变
+
+**使用场景：**
+- 解析config.js等配置文件中的静态资源依赖（如SVG图标）
+- 分析JavaScript模块的依赖关系
+- 处理样式文件的导入依赖
+- 支持混合项目中多种文件类型的依赖分析
+
 ## [1.2.0] - 2025-09-05
 
 ### ✨ Features

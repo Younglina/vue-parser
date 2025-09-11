@@ -374,19 +374,27 @@ class VueParserServer {
         );
       }
 
-      // 读取Vue文件内容
+      // 读取文件内容
       const content = fs.readFileSync(resolvedPath, 'utf-8');
       
-      // 使用@vue/compiler-sfc解析Vue文件
-      const { descriptor, errors } = parse(content, {
-        filename: resolvedPath,
-      });
-
-      if (errors.length > 0) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Vue文件解析错误 (${resolvedPath}): ${errors.map(e => e.message).join(', ')}`
-        );
+      // 检查文件类型
+      const isVueFile = path.extname(resolvedPath).toLowerCase() === '.vue';
+      let descriptor = null;
+      
+      if (isVueFile) {
+        // 使用@vue/compiler-sfc解析Vue文件
+        const parseResult = parse(content, {
+          filename: resolvedPath,
+        });
+        
+        if (parseResult.errors.length > 0) {
+          throw new McpError(
+            ErrorCode.InternalError,
+            `Vue文件解析错误 (${resolvedPath}): ${parseResult.errors.map(e => e.message).join(', ')}`
+          );
+        }
+        
+        descriptor = parseResult.descriptor;
       }
 
       // 提取依赖
@@ -399,17 +407,22 @@ class VueParserServer {
 
       // 检测vuex使用
       const scriptContents = [];
-      if (descriptor.script) {
-        scriptContents.push(descriptor.script.content);
-      }
-      if (descriptor.scriptSetup) {
-        scriptContents.push(descriptor.scriptSetup.content);
+      if (isVueFile && descriptor) {
+        if (descriptor.script) {
+          scriptContents.push(descriptor.script.content);
+        }
+        if (descriptor.scriptSetup) {
+          scriptContents.push(descriptor.scriptSetup.content);
+        }
+      } else if (!isVueFile) {
+        // 对于非Vue文件，直接使用文件内容作为script内容
+        scriptContents.push(content);
       }
 
       let hasVuex = false;
       const allUsedModules = new Set();
-      for (const content of scriptContents) {
-        const vuexInfo = this.detectVuexUsage(content);
+      for (const scriptContent of scriptContents) {
+        const vuexInfo = this.detectVuexUsage(scriptContent);
         if (vuexInfo.hasVuex) {
           hasVuex = true;
           vuexInfo.usedModules.forEach(module => allUsedModules.add(module));
@@ -437,44 +450,64 @@ class VueParserServer {
           }
         }
       }
-      // 解析template部分的依赖
-      if (descriptor.template) {
-        dependencies.template = this.extractTemplateDependencies(
-          descriptor.template.content,
-          aliasConfig,
-          baseDir
-        );
-      }
-
-      // 解析script部分的依赖
-      if (descriptor.script) {
-        dependencies.script = this.extractScriptDependencies(
-          descriptor.script.content,
-          aliasConfig,
-          baseDir
-        );
-      }
-
-      // 解析script setup部分的依赖
-      if (descriptor.scriptSetup) {
-        const setupDeps = this.extractScriptDependencies(
-          descriptor.scriptSetup.content,
-          aliasConfig,
-          baseDir
-        );
-        dependencies.script = [...dependencies.script, ...setupDeps];
-      }
-
-      // 解析style部分的依赖
-      if (descriptor.styles && descriptor.styles.length > 0) {
-        descriptor.styles.forEach(style => {
-          const styleDeps = this.extractStyleDependencies(
-            style.content,
+      if (isVueFile && descriptor) {
+        // 解析template部分的依赖
+        if (descriptor.template) {
+          dependencies.template = this.extractTemplateDependencies(
+            descriptor.template.content,
             aliasConfig,
             baseDir
           );
-          dependencies.style = [...dependencies.style, ...styleDeps];
-        });
+        }
+
+        // 解析script部分的依赖
+        if (descriptor.script) {
+          dependencies.script = this.extractScriptDependencies(
+            descriptor.script.content,
+            aliasConfig,
+            baseDir
+          );
+        }
+
+        // 解析script setup部分的依赖
+        if (descriptor.scriptSetup) {
+          const setupDeps = this.extractScriptDependencies(
+            descriptor.scriptSetup.content,
+            aliasConfig,
+            baseDir
+          );
+          dependencies.script = [...dependencies.script, ...setupDeps];
+        }
+
+        // 解析style部分的依赖
+        if (descriptor.styles && descriptor.styles.length > 0) {
+          descriptor.styles.forEach(style => {
+            const styleDeps = this.extractStyleDependencies(
+              style.content,
+              aliasConfig,
+              baseDir
+            );
+            dependencies.style = [...dependencies.style, ...styleDeps];
+          });
+        }
+      } else if (!isVueFile) {
+        // 对于非Vue文件，根据文件扩展名处理
+        const ext = path.extname(resolvedPath).toLowerCase();
+        if (['.js', '.ts', '.jsx', '.tsx'].includes(ext)) {
+          // JavaScript/TypeScript文件，解析script依赖
+          dependencies.script = this.extractScriptDependencies(
+            content,
+            aliasConfig,
+            baseDir
+          );
+        } else if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
+          // 样式文件，解析style依赖
+          dependencies.style = this.extractStyleDependencies(
+            content,
+            aliasConfig,
+            baseDir
+          );
+        }
       }
 
       // 去重
@@ -1247,8 +1280,8 @@ class VueParserServer {
    * 判断是否为支持的文件类型
    */
   isSupportedFile(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    return ['.vue', '.js', '.ts', '.jsx', '.tsx', '.css', '.scss', '.sass', '.less'].includes(ext);
+    // 支持所有文件类型，不再限制扩展名
+    return true;
   }
 
   /**
