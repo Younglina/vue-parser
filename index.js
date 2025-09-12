@@ -776,8 +776,15 @@ class VueParserServer {
       return importPath;
     }
 
+    let normalizedImport = importPath;
+    
+    // 处理样式文件中的~别名（webpack语法）
+    if (normalizedImport.startsWith('~')) {
+      normalizedImport = normalizedImport.slice(1); // 移除~前缀
+    }
+    
     // 规范化导入路径
-    const normalizedImport = path.normalize(importPath);
+    normalizedImport = path.normalize(normalizedImport);
     
     // 按别名长度排序，确保最长匹配优先
     const sortedAliases = Object.entries(aliasConfig)
@@ -866,8 +873,20 @@ class VueParserServer {
         dependencies.push(resolvedPath);
       }
     }
+    
+    // 匹配所有require()调用
+    const requireRegex = /require\(["']([^"']+)["']\)/g;
+    let requireMatch;
+    
+    while ((requireMatch = requireRegex.exec(templateContent)) !== null) {
+      const requirePath = requireMatch[1];
+      if (this.isLocalFile(requirePath)) {
+        const resolvedPath = this.resolveAlias(requirePath, aliasConfig, baseDir);
+        dependencies.push(resolvedPath);
+      }
+    }
 
-    return dependencies;
+    return [...new Set(dependencies)]; // 去重
   }
 
   /**
@@ -957,6 +976,11 @@ class VueParserServer {
    */
   isLocalFile(filePath) {
     // 排除HTTP URL、node_modules包、绝对URL等
+    // 但包含以~开头的webpack别名路径
+    if (filePath.startsWith('~')) {
+      return true; // ~开头的路径通常是webpack别名，应该被处理
+    }
+    
     return !filePath.startsWith('http') && 
            !filePath.startsWith('//') && 
            !filePath.startsWith('data:') && 
