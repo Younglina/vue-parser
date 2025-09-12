@@ -34,6 +34,12 @@ async function testDirectImport() {
     console.log('✅ parseVueDependencies 执行成功');
     const parseData = JSON.parse(parseResult.content[0].text);
     
+    // 检查解析是否成功
+    if (!parseData.success) {
+      console.error('❌ 解析失败:', parseData.error);
+      return;
+    }
+    
     console.log(`📦 总依赖数: ${parseData.summary.totalFiles}`);
     console.log(`📄 Template依赖: ${parseData.summary.templateFiles}个`);
     console.log(`📄 Script依赖: ${parseData.summary.scriptFiles}个`);
