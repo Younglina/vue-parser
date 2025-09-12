@@ -1,9 +1,13 @@
 # MCP Vue Parser 更新记录
 
-## [1.3.3] - 2025-09-12
+## [1.3.4] - 2025-09-12
 
-### 🐛 Bug Fixes
-1. 处理未定义resolvedPath时使用原始filePath
+### 🐛 Features
+1. 增强路径解析逻辑以支持webpack别名和require调用
+- 处理样式文件中的~别名并规范化路径
+- 添加对require()调用的依赖收集
+- 为isLocalFile方法添加webpack别名路径支持
+- 返回依赖列表时进行去重
 
 ## [1.3.2] - 2025-09-11
 
