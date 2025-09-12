@@ -547,13 +547,16 @@ class VueParserServer {
         ],
       };
     } catch (error) {
+      // 如果resolvedPath未定义，使用原始filePath
+      const errorFilePath = typeof resolvedPath !== 'undefined' ? resolvedPath : (args.filePath || '未知文件');
+      
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
               success: false,
-              filePath: resolvedPath,
+              filePath: errorFilePath,
               error: error.message || '未知错误',
             }, null, 2),
           },
